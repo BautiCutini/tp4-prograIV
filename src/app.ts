@@ -1,6 +1,6 @@
 import path from 'path';
 import express from 'express';
-
+import { entregarTokenCsrf, protegerCsrf } from './middleware/csrf';
 import config from './config';
 import { rutaNoEncontrada, manejadorErrores } from './middleware/errores';
 import authRoutes from './routes/auth.routes';
@@ -10,6 +10,7 @@ import reportesRoutes from './routes/reportes.routes';
 import comentariosRoutes from './routes/comentarios.routes';
 import adminRoutes from './routes/admin.routes';
 import debugRoutes from './routes/debug.routes';
+
 
 const app = express();
 
@@ -23,6 +24,8 @@ const app = express();
  *  - política de CORS restringida al propio origen
  *  - helmet CSP además sirve como capa extra frente al XSS
  */
+app.get('/api/csrf-token', entregarTokenCsrf);
+app.use('/api', protegerCsrf);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
