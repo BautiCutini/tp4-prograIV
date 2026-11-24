@@ -154,10 +154,16 @@
 
   function renderResultado(filtros, total) {
     var el = $('#resultado-busqueda');
+  
 
-    // FALLA (XSS reflejado): se interpola el texto buscado con innerHTML.
+   // CORREGIDO (VUL-05): se arma con nodos de texto, nunca se interpreta como HTML.
     if (filtros && filtros.q) {
-      el.innerHTML = 'Resultados para <strong>' + filtros.q + '</strong> — ' + total + ' producto(s)';
+      el.textContent = '';
+      el.appendChild(document.createTextNode('Resultados para '));
+      var strong = document.createElement('strong');
+      strong.textContent = filtros.q;
+      el.appendChild(strong);
+      el.appendChild(document.createTextNode(' — ' + total + ' producto(s)'));
     } else {
       el.textContent = total + ' producto(s) en el menú';
     }
@@ -390,4 +396,6 @@
   } else {
     init();
   }
-})();
+}());
+
+
