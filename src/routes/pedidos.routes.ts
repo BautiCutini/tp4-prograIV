@@ -18,13 +18,31 @@ const router = express.Router();
 router.post('/', async (req, res, next) => {
   try {
     const { mesa, cliente, items } = req.body || {};
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Items inválidos.' });
+    }
+
+    const cantidadesValidas = items.every(
+      (item: unknown) =>
+        typeof item === 'object' &&
+        item !== null &&
+        'cantidad' in item &&
+        typeof item.cantidad === 'number' &&
+        Number.isInteger(item.cantidad) &&
+        item.cantidad >= 1
+    );
+
+    if (!cantidadesValidas) {
+      return res.status(400).json({ error: 'Cantidades inválidas.' });
+    }
+
     const pedido = await pedidos.crear({ mesa, cliente, items });
     res.status(201).json(pedido);
   } catch (err) {
     next(err);
   }
 });
-
 /**
  * GET /api/pedidos?mesa=
  * Lista los pedidos de todas las mesas.

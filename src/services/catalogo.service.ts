@@ -32,28 +32,45 @@ type Id = number | string;
  */
 
 /** Lista productos aplicando los filtros del menú. */
-export async function listar(filtros: FiltrosCatalogo = {}): Promise<ProductoConPrecio[]> {
+export async function listar(
+  filtros: FiltrosCatalogo = {}
+): Promise<ProductoConPrecio[]> {
   const { tipo, variedad, q } = filtros;
 
-  // FALLA: concatenación directa de entrada de usuario en la consulta.
   let sql = 'SELECT * FROM productos WHERE activo = true';
-  if (tipo) sql += ` AND tipo = '${tipo}'`;
-  if (variedad) sql += ` AND variedad = '${variedad}'`;
-  if (q) {
-    sql += ` AND (nombre ILIKE '%${q}%' OR descripcion ILIKE '%${q}%')`;
+  const valores: unknown[] = [];
+
+  if (tipo) {
+    valores.push(tipo);
+    sql += ` AND tipo = $${valores.length}`;
   }
+
+  if (variedad) {
+    valores.push(variedad);
+    sql += ` AND variedad = $${valores.length}`;
+  }
+
+  if (q) {
+    valores.push(`%${q}%`);
+    sql += ` AND (nombre ILIKE $${valores.length} OR descripcion ILIKE $${valores.length})`;
+  }
+
   sql += ' ORDER BY tipo, variedad NULLS FIRST, id';
 
-  const { rows } = await db.query<Producto>(sql);
+  const { rows } = await db.query<Producto>(sql, valores);
 
   return rows.map((p) => ({ ...p, precio: calcularPrecio(p) }));
 }
 
 /** Obtiene un producto por id. */
 export async function obtener(id: Id): Promise<ProductoConPrecio | null> {
-  // FALLA: inyección SQL en el id.
-  const { rows } = await db.query<Producto>(`SELECT * FROM productos WHERE id = '${id}'`);
+  const { rows } = await db.query<Producto>(
+    'SELECT * FROM productos WHERE id = $1',
+    [id]
+  );
+
   if (!rows[0]) return null;
+
   return { ...rows[0], precio: calcularPrecio(rows[0]) };
 }
 
@@ -61,7 +78,7 @@ export async function obtener(id: Id): Promise<ProductoConPrecio | null> {
 export async function crear(datos: DatosProductoEntrada): Promise<Producto> {
   const { rows } = await db.query<Producto>(
     `INSERT INTO productos (nombre, tipo, variedad, tamano, gramos, precio_base, precio_por_gramo, descripcion)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
     [
       datos.nombre,
@@ -113,7 +130,8 @@ export async function eliminar(id: Id): Promise<Producto | null> {
 /** Lista las variedades disponibles en el catálogo. */
 export async function variedades(): Promise<string[]> {
   const { rows } = await db.query<{ variedad: string }>(
-    "SELECT DISTINCT variedad FROM productos WHERE variedad IS NOT NULL ORDER BY variedad"
+    'SELECT DISTINCT variedad FROM productos WHERE variedad IS NOT NULL ORDER BY variedad'
   );
-  return rows.map((r) => r.variedad);
+
+  return rows.map((r: { variedad: string }) => r.variedad);
 }
