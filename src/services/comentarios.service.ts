@@ -37,17 +37,25 @@ export async function listar(): Promise<Comentario[]> {
 }
 
 /** Crea un comentario. */
-export async function crear({ autor, texto, calificacion }: NuevoComentario): Promise<Comentario> {
-  // FALLA: sin validación de longitud ni de rango de calificación.
+/** Crea un comentario. */
+export async function crear({
+  autor,
+  texto,
+  calificacion,
+}: NuevoComentario): Promise<Comentario> {
+  if (typeof texto !== 'string' || texto.length > 280) {
+    throw new Error('La reseña no puede superar los 280 caracteres.');
+  }
+
   const { rows } = await db.query<Comentario>(
     `INSERT INTO comentarios (autor, texto, calificacion)
-     VALUES ($1, $2, $3)
+      VALUES ($1, $2, $3)
      RETURNING *`,
     [autor, texto, calificacion]
   );
+
   return rows[0];
 }
-
 /** Elimina un comentario. */
 export async function eliminar(id: number | string): Promise<Comentario | null> {
   const { rows } = await db.query<Comentario>(
