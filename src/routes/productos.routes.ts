@@ -47,7 +47,7 @@ router.get('/variedades', async (req, res, next) => {
  * Devuelve un producto.
  *
  * FALLA — Inyección SQL en el id (el id se mete en la consulta entre comillas).
- * FALLA — XSS reflejado: el mensaje de error incluye el id recibido.
+  // CORREGIDO (VUL-06): mensaje generico, no se devuelve la entrada del usuario.
  */
 router.get('/:id', async (req, res, next) => {
   try {
@@ -55,7 +55,7 @@ router.get('/:id', async (req, res, next) => {
     if (!producto) {
       return res
         .status(404)
-        .json({ error: `No existe el producto "${req.params.id}".` });
+        .json({ error: 'Producto no encontrado.' });
     }
     res.json(producto);
   } catch (err) {

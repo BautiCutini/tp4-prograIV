@@ -1,5 +1,6 @@
 import * as db from './db';
 import { CATALOGO } from './catalogo';
+import { hashearPassword } from './services/usuarios.service';
 import type { Rol } from './tipos';
 
 interface UsuarioInicial {
@@ -11,55 +12,25 @@ interface UsuarioInicial {
 
 /**
  * Carga los datos iniciales (usuarios y catálogo) si la base está vacía.
- *
- * FALLA — Almacenamiento inseguro de credenciales:
- * las contraseñas de los usuarios se guardan en TEXTO PLANO.
- * La corrección es hashear con bcrypt + salt por usuario
- * (bcryptjs ya está instalado como dependencia del proyecto).
+ * Las contraseñas se guardan hasheadas con bcrypt; en la base nunca queda
+ * el texto plano. Se eliminó la cuenta por defecto admin/admin.
  */
-
 export const USUARIOS_INICIALES: UsuarioInicial[] = [
-  {
-    username: 'admin',
-    password: 'admin',
-    rol: 'admin',
-    nombre: 'Administración',
-  },
-  {
-    username: 'valentina',
-    password: 'origen2024',
-    rol: 'admin',
-    nombre: 'Valentina',
-  },
-  {
-    username: 'barista',
-    password: 'cafe123',
-    rol: 'barista',
-    nombre: 'Barista',
-  },
-  {
-    username: 'mozo',
-    password: 'mozo123',
-    rol: 'mozo',
-    nombre: 'Mozo de sala',
-  },
-  {
-    username: 'cliente',
-    password: 'cliente',
-    rol: 'cliente',
-    nombre: 'Cliente',
-  },
+  { username: 'valentina', password: 'origen2024', rol: 'admin', nombre: 'Valentina' },
+  { username: 'barista', password: 'cafe123', rol: 'barista', nombre: 'Barista' },
+  { username: 'mozo', password: 'mozo123', rol: 'mozo', nombre: 'Mozo de sala' },
+  { username: 'cliente', password: 'cliente', rol: 'cliente', nombre: 'Cliente' },
 ];
 
 export async function inicializarBase(): Promise<void> {
   // --- Usuarios -------------------------------------------------------------
   for (const usuario of USUARIOS_INICIALES) {
-    // FALLA: la contraseña se guarda tal cual, sin hash ni salt.
+    const hash = await hashearPassword(usuario.password);
     await db.query(
       `INSERT INTO usuarios (username, password, rol, nombre)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (username) DO NOTHING`,
-      [usuario.username, usuario.password, usuario.rol, usuario.nombre]
+      [usuario.username, hash, usuario.rol, usuario.nombre]
     );
   }
 

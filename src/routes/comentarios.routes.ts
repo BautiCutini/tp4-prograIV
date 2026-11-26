@@ -24,11 +24,19 @@ router.get('/', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   try {
     const { autor, texto, calificacion } = req.body || {};
+
+    if (typeof texto !== 'string' || texto.length > 280) {
+      return res.status(400).json({
+        error: 'La reseña no puede superar los 280 caracteres.',
+      });
+    }
+
     const comentario = await comentarios.crear({
       autor,
       texto,
       calificacion,
     });
+
     res.status(201).json(comentario);
   } catch (err) {
     next(err);

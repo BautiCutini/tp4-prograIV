@@ -29,9 +29,39 @@
     return String(valor == null ? '' : valor);
   }
 
-  function api(url, opciones) {
-    return fetch(API + url, opciones).then(function (res) {
+    // Token anti-CSRF de la sesión actual (se pide al servidor, no se fija en el HTML).
+  var csrfToken = null;
+
+  function obtenerCsrf() {
+    if (csrfToken) return Promise.resolve(csrfToken);
+    return fetch(API + '/csrf-token', { credentials: 'same-origin' })
+      .then(function (res) { return res.ok ? res.json() : {}; })
+      .then(function (data) {
+        csrfToken = data.token || null; // null si no hay sesión
+        return csrfToken;
+      })
+      .catch(function () { return null; });
+  }
+
+  function api(url, opciones, reintento) {
+    opciones = Object.assign({ credentials: 'same-origin' }, opciones || {});
+    var metodo = (opciones.method || 'GET').toUpperCase();
+    var cambiaEstado = ['GET', 'HEAD', 'OPTIONS'].indexOf(metodo) === -1;
+
+    return (cambiaEstado ? obtenerCsrf() : Promise.resolve(null)).then(function (token) {
+      if (token) {
+        opciones.headers = Object.assign({}, opciones.headers, { 'X-CSRF-Token': token });
+      }
+      return fetch(API + url, opciones);
+    }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
+       
+        if (url === '/auth/login' || url === '/auth/logout') csrfToken = null;
+       
+        if (res.status === 403 && data.codigo === 'CSRF' && !reintento) {
+          csrfToken = null;
+          return api(url, opciones, true);
+        }
         return { ok: res.ok, status: res.status, data: data };
       });
     });
@@ -124,10 +154,16 @@
 
   function renderResultado(filtros, total) {
     var el = $('#resultado-busqueda');
+  
 
-    // FALLA (XSS reflejado): se interpola el texto buscado con innerHTML.
+   // CORREGIDO (VUL-05): se arma con nodos de texto, nunca se interpreta como HTML.
     if (filtros && filtros.q) {
-      el.innerHTML = 'Resultados para <strong>' + filtros.q + '</strong> — ' + total + ' producto(s)';
+      el.textContent = '';
+      el.appendChild(document.createTextNode('Resultados para '));
+      var strong = document.createElement('strong');
+      strong.textContent = filtros.q;
+      el.appendChild(strong);
+      el.appendChild(document.createTextNode(' — ' + total + ' producto(s)'));
     } else {
       el.textContent = total + ' producto(s) en el menú';
     }
@@ -254,8 +290,8 @@
         cont.innerHTML = '<p class="empty">Todavía no hay reseñas. ¡Sé el primero!</p>';
         return;
       }
-      // FALLA (XSS almacenado): el texto de la reseña viene de la base y se
-      // inyecta con innerHTML → se ejecuta en el navegador de cada visitante.
+      // CORREGIDO (VUL-07): autor y texto vienen de la base (datos de usuario),
+      // se escapan con escaparHtml() antes de insertarlos en el HTML.
       cont.innerHTML = resp.data.comentarios.map(function (c) {
         var estrellas = '';
         var i;
@@ -263,10 +299,10 @@
         return '' +
           '<article class="review">' +
           '  <div class="review-head">' +
-          '    <span class="review-author">' + raw(c.autor) + '</span>' +
+          '    <span class="review-author">' + escaparHtml(c.autor) + '</span>' +
           '    <span class="review-stars">' + estrellas + '</span>' +
           '  </div>' +
-          '  <p class="review-text">' + raw(c.texto) + '</p>' +
+          '  <p class="review-text">' + escaparHtml(c.texto) + '</p>' +
           '</article>';
       }).join('');
     });
@@ -360,4 +396,6 @@
   } else {
     init();
   }
-})();
+}());
+
+

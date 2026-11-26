@@ -40,17 +40,41 @@ type Id = number | string;
  * Crea un pedido a partir de una lista de items { productoId, cantidad }.
  * Total = suma de calcularPrecio(producto) x cantidad
  */
-export async function crear({ mesa, cliente, items }: NuevoPedido): Promise<PedidoConItems | null> {
-  // FALLA: no se valida que items exista, sea un array, ni que cada cantidad
-  // sea un entero positivo. Los tipos de `NuevoPedido` NO alcanzan: el cuerpo
-  // de la petición llega como `any` y en ejecución puede traer cualquier cosa.
-  const filas: { productoId: number; cantidad: number; precioUnitario: number }[] = [];
+export async function crear({
+  mesa,
+  cliente,
+  items,
+}: NuevoPedido): Promise<PedidoConItems | null> {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error('El pedido debe contener items');
+  }
 
   for (const item of items) {
-    // Si el producto no existe, buscarProducto devuelve null y `precio`
-    // revienta con un TypeError cuyo stack se filtra al cliente.
+    if (
+      !Number.isInteger(item?.cantidad) ||
+      item.cantidad < 1 ||
+      !Number.isInteger(item?.productoId) ||
+      item.productoId < 1
+    ) {
+      throw new Error('Datos de pedido inválidos');
+    }
+  }
+
+  const filas: {
+    productoId: number;
+    cantidad: number;
+    precioUnitario: number;
+  }[] = [];
+
+  for (const item of items) {
     const producto = await buscarProducto(item.productoId);
+
+    if (!producto) {
+      throw new Error('Producto inexistente');
+    }
+
     const precioUnitario = calcularPrecio(producto);
+
     filas.push({
       productoId: producto.id,
       cantidad: item.cantidad,
@@ -65,16 +89,17 @@ export async function crear({ mesa, cliente, items }: NuevoPedido): Promise<Pedi
 
   const { rows } = await db.query<Pedido>(
     `INSERT INTO pedidos (mesa, cliente, estado, total)
-     VALUES ($1, $2, 'abierto', $3)
+      VALUES ($1, $2, 'abierto', $3)
      RETURNING *`,
     [mesa, cliente, total]
   );
+
   const pedido = rows[0];
 
   for (const fila of filas) {
     await db.query(
       `INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario)
-       VALUES ($1, $2, $3, $4)`,
+        VALUES ($1, $2, $3, $4)`,
       [pedido.id, fila.productoId, fila.cantidad, fila.precioUnitario]
     );
   }
@@ -89,13 +114,19 @@ async function buscarProducto(productoId: number): Promise<Producto> {
 }
 
 /** Lista pedidos (con filtro opcional por mesa). */
+/** Lista pedidos (con filtro opcional por mesa). */
 export async function listar(mesa?: string): Promise<Pedido[]> {
-  // FALLA: inyección SQL en el filtro de mesa.
   let sql = 'SELECT * FROM pedidos';
-  if (mesa) sql += ` WHERE mesa = '${mesa}'`;
+  const valores: unknown[] = [];
+
+  if (mesa !== undefined && mesa !== '') {
+    valores.push(mesa);
+    sql += ` WHERE mesa = $${valores.length}`;
+  }
+
   sql += ' ORDER BY id DESC';
 
-  const { rows } = await db.query<Pedido>(sql);
+  const { rows } = await db.query<Pedido>(sql, valores);
   return rows;
 }
 
@@ -110,8 +141,8 @@ export async function obtenerConItems(id: Id): Promise<PedidoConItems | null> {
 
   const { rows: items } = await db.query<PedidoItem>(
     `SELECT pi.*, pr.nombre AS producto_nombre
-       FROM pedido_items pi
-       JOIN productos pr ON pr.id = pi.producto_id
+      FROM pedido_items pi
+      JOIN productos pr ON pr.id = pi.producto_id
       WHERE pi.pedido_id = $1`,
     [id]
   );
